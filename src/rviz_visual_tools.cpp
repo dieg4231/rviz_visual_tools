@@ -40,7 +40,6 @@
 
 // Conversions
 #include <tf2/convert.h>
-#include <tf_conversions/tf_eigen.h>
 
 // C++
 #include <cmath>  // for random poses
@@ -60,15 +59,33 @@ const std::array<colors, 14> RvizVisualTools::ALL_RAND_COLORS = { RED,        GR
                                                                   WHITE,      ORANGE, YELLOW, BROWN,  PINK,
                                                                   LIME_GREEN, PURPLE, CYAN,   MAGENTA };
 
-RvizVisualTools::RvizVisualTools(std::string base_frame, std::string marker_topic, rclcpp::Node::SharedPtr nh)
-  : nh_(nh), marker_topic_(std::move(marker_topic)), base_frame_(std::move(base_frame))
+template<class NodePtr>
+RvizVisualTools::RvizVisualTools(std::string base_frame, std::string marker_topic, NodePtr node)
+  : RvizVisualTools(base_frame, marker_topic, node->get_node_topics_interface(), node->get_node_graph_interface(), node->get_node_clock_interface(), node->get_node_logging_interface())
+{
+}
+
+RvizVisualTools::RvizVisualTools(
+    const std::string& base_frame, const std::string& marker_topic,
+    const rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& topics_interface,
+    const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& graph_interface,
+    const rclcpp::node_interfaces::NodeClockInterface::SharedPtr& clock_interface,
+    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr& logging_interface)
+  : topics_interface_(topics_interface)
+  , graph_interface_(graph_interface)
+  , clock_interface_(clock_interface)
+  , logging_interface_(logging_interface)
+  , logger_(logging_interface->get_logger().get_child("rviz_visual_tools"))
+  , marker_topic_(marker_topic)
+  , base_frame_(base_frame)
+  ,
 {
   initialize();
 }
 
 void RvizVisualTools::initialize()
 {
-  marker_lifetime_ = ros::Duration(0.0);  // 0 - unlimited
+  marker_lifetime_ = builtin_interfaces::msg::Duration(0.0);  // 0 - unlimited
 
   // Cache the reusable markers
   loadRvizMarkers();
@@ -99,7 +116,7 @@ bool RvizVisualTools::loadRvizMarkers()
 {
   // Load reset marker -------------------------------------------------
   reset_marker_.header.frame_id = base_frame_;
-  reset_marker_.header.stamp = ros::Time();
+  reset_marker_.header.stamp = builtin_interfaces::msg::Time();
   reset_marker_.ns = "deleteAllMarkers";  // helps during debugging
   reset_marker_.action = 3;               // TODO(davetcoleman): In ROS-J set to visualization_msgs::msg::Marker::DELETEALL;
   reset_marker_.pose.orientation.w = 1;
@@ -275,8 +292,15 @@ void RvizVisualTools::loadMarkerPub(bool wait_for_subscriber, bool latched)
   }
 
   // Rviz marker publisher
-  pub_rviz_markers_ = node_.advertise<visualization_msgs::msg::MarkerArray>(marker_topic_, 10, latched);
-  ROS_DEBUG_STREAM_NAMED(LOGNAME, "Publishing Rviz markers on topic " << pub_rviz_markers_.getTopic());
+  feedback_pub_qos = rclcpp::QoS(10);
+  pub_rviz_markers_ = rclcpp::create_publisher<visualization_msgs::msg::MarkerArray>(
+    topics_interface_,
+    marker_topic_,
+    feedback_pub_qos);
+
+  std::stringstream ss;
+  ss << "Publishing Rviz markers on topic " << pub_rviz_markers_.getTopic();
+  RCLCPP_DEBUG(logger_, ss.str().c_str());
 
   if (wait_for_subscriber)
   {
@@ -296,51 +320,63 @@ void RvizVisualTools::waitForMarkerPub(double wait_time)
   waitForSubscriber(pub_rviz_markers_, wait_time, blocking);
 }
 
-bool RvizVisualTools::waitForSubscriber(const ros::Publisher& pub, double wait_time, bool blocking)
+template<class PublisherPtr>
+bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_time, bool blocking)
 {
   // Will wait at most this amount of time
-  ros::Time max_time(node_->now() + ros::Duration(wait_time));
+
+  int32_t sec = static_cast<int32_t>(floor(lifetime));
+  int32_t nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
+  builtin_interfaces::msg::Duration wait_duration(sec, nsec)
+
+  builtin_interfaces::msg::Time max_time(clock_interface_->get_clock()->now() + wait_duration);
 
   // This is wrong. It returns only the number of subscribers that have already
   // established their direct connections to this publisher
-  int num_existing_subscribers = pub.getNumSubscribers();
 
   // How often to check for subscribers
-  ros::Rate poll_rate(200);
-
-  if (pub.getTopic().empty())
+  double loop_rate = 1.0 / 200.0;
+  sec = static_cast<int32_t>(floor(loop_rate));
+  nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
+  builtin_interfaces::msg::Duration loop_duration(sec, nsec);
+  if (!pub)
   {
-    ROS_ERROR_STREAM_NAMED(LOGNAME, "loadMarkerPub() has not been called yet, unable to wait for subscriber.");
+    RCLCPP_ERROR(logger_, "loadMarkerPub() has not been called yet, unable to wait for subscriber.");
   }
 
+  std::string topic_name = pub->get_topic_name();
+  int num_existing_subscribers = graph_interface_->count_subscribers(topic_name);
   if (blocking && num_existing_subscribers == 0)
   {
-    ROS_INFO_STREAM_NAMED(LOGNAME, "Topic '" << pub.getTopic() << "' waiting for subscriber...");
+    std::stringstream ss;
+    ss << "Topic '" << pub.getTopic() << "' waiting for subscriber...";
+    ROS_INFO_STREAM_NAMED(LOGNAME, ss.str().c_str());
   }
 
   // Wait for subscriber
-  while (num_existing_subscribers == 0)
+  while (num_existing_subscribers == 0 && rclcpp::ok())
   {
-    if (!blocking && node_->now() > max_time)  // Check if timed out
+    if (!blocking && clock_interface_->get_clock()->now() > max_time)  // Check if timed out
     {
-      ROS_WARN_STREAM_NAMED(LOGNAME, "Topic '" << pub.getTopic() << "' unable to connect to any subscribers within "
+      std::stringstream ss;
+      ss <<"Topic '" << pub.getTopic() << "' unable to connect to any subscribers within "
                                                << wait_time
                                                << " sec. It is possible initially published visual messages "
-                                                  "will be lost.");
+                                                  "will be lost.";
+      ROS_WARN(logger_, ss.str().c_str());
       return false;
     }
-    ros::spinOnce();
 
     // Sleep
-    poll_rate.sleep();
+    rclcpp::sleep_for(poll_rate.nanoseconds());
 
     // Check again
-    num_existing_subscribers = pub.getNumSubscribers();
+    num_existing_subscribers = graph_interface_->count_subscribers(topic_name);
 
-    if (!rclcpp::ok())
-    {
-      return false;
-    }
+  }
+  if (!rclcpp::ok())
+  {
+    return false;
   }
   pub_rviz_markers_connected_ = true;
 
@@ -349,7 +385,9 @@ bool RvizVisualTools::waitForSubscriber(const ros::Publisher& pub, double wait_t
 
 void RvizVisualTools::setLifetime(double lifetime)
 {
-  marker_lifetime_ = ros::Duration(lifetime);
+  int32_t sec = static_cast<int32_t>(floor(lifetime));
+  int32_t nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
+  marker_lifetime_ = builtin_interfaces::msg::Duration(sec, nsec)
 
   // Update cached markers
   arrow_marker_.lifetime = marker_lifetime_;
@@ -952,7 +990,7 @@ bool RvizVisualTools::publishCone(const Eigen::Isometry3d& pose, double angle, c
 
 bool RvizVisualTools::publishCone(const geometry_msgs::msg::Pose& pose, double angle, colors color, double scale)
 {
-  triangle_marker_.header.stamp = node_->now();
+  triangle_marker_.header.stamp = clock_interface_->get_clock()->now();
   triangle_marker_.id++;
 
   triangle_marker_.color = getColor(color);
@@ -1022,7 +1060,7 @@ bool RvizVisualTools::publishXYPlane(const Eigen::Isometry3d& pose, colors color
 
 bool RvizVisualTools::publishXYPlane(const geometry_msgs::msg::Pose& pose, colors color, double scale)
 {
-  triangle_marker_.header.stamp = node_->now();
+  triangle_marker_.header.stamp = clock_interface_->get_clock()->now();
   triangle_marker_.id++;
 
   triangle_marker_.color = getColor(color);
@@ -1068,7 +1106,7 @@ bool RvizVisualTools::publishXZPlane(const Eigen::Isometry3d& pose, colors color
 
 bool RvizVisualTools::publishXZPlane(const geometry_msgs::msg::Pose& pose, colors color, double scale)
 {
-  triangle_marker_.header.stamp = node_->now();
+  triangle_marker_.header.stamp = clock_interface_->get_clock()->now();
   triangle_marker_.id++;
 
   triangle_marker_.color = getColor(color);
@@ -1114,7 +1152,7 @@ bool RvizVisualTools::publishYZPlane(const Eigen::Isometry3d& pose, colors color
 
 bool RvizVisualTools::publishYZPlane(const geometry_msgs::msg::Pose& pose, colors color, double scale)
 {
-  triangle_marker_.header.stamp = node_->now();
+  triangle_marker_.header.stamp = clock_interface_->get_clock()->now();
   triangle_marker_.id++;
 
   triangle_marker_.color = getColor(color);
@@ -1223,7 +1261,7 @@ bool RvizVisualTools::publishSphere(const geometry_msgs::msg::Pose& pose, const 
                                     const geometry_msgs::msg::Vector3 scale, const std::string& ns, std::size_t id)
 {
   // Set the frame ID and timestamp
-  sphere_marker_.header.stamp = node_->now();
+  sphere_marker_.header.stamp = clock_interface_->get_clock()->now();
 
   // Overwrite ID or increment?
   if (id == 0)
@@ -1346,7 +1384,7 @@ bool RvizVisualTools::publishArrow(const geometry_msgs::msg::Pose& pose, colors 
                                    std::size_t id)
 {
   // Set the frame ID and timestamp.
-  arrow_marker_.header.stamp = node_->now();
+  arrow_marker_.header.stamp = clock_interface_->get_clock()->now();
   arrow_marker_.header.frame_id = base_frame_;
 
   if (id == 0)
@@ -1416,7 +1454,7 @@ bool RvizVisualTools::publishArrow(const geometry_msgs::msg::Point& start, const
                                    scales scale, std::size_t id)
 {
   // Set the frame ID and timestamp.
-  arrow_marker_.header.stamp = node_->now();
+  arrow_marker_.header.stamp = clock_interface_->get_clock()->now();
   arrow_marker_.header.frame_id = base_frame_;
 
   if (id == 0)
@@ -1589,7 +1627,7 @@ bool RvizVisualTools::publishCylinder(const geometry_msgs::msg::Pose& pose, cons
                                       double radius, const std::string& ns)
 {
   // Set the timestamp
-  cylinder_marker_.header.stamp = node_->now();
+  cylinder_marker_.header.stamp = clock_interface_->get_clock()->now();
   cylinder_marker_.ns = ns;
   cylinder_marker_.id++;
 
@@ -1618,7 +1656,7 @@ bool RvizVisualTools::publishMesh(const geometry_msgs::msg::Pose& pose, const st
                                   double scale, const std::string& ns, std::size_t id)
 {
   // Set the timestamp
-  mesh_marker_.header.stamp = node_->now();
+  mesh_marker_.header.stamp = clock_interface_->get_clock()->now();
 
   if (id == 0)
   {
@@ -1661,7 +1699,7 @@ bool RvizVisualTools::publishMesh(const Eigen::Isometry3d& pose, const shape_msg
 bool RvizVisualTools::publishMesh(const geometry_msgs::msg::Pose& pose, const shape_msgs::msg::Mesh& mesh, colors color,
                                   double scale, const std::string& ns, std::size_t id)
 {
-  triangle_marker_.header.stamp = node_->now();
+  triangle_marker_.header.stamp = clock_interface_->get_clock()->now();
 
   if (id == 0)
   {
@@ -1697,37 +1735,38 @@ bool RvizVisualTools::publishMesh(const geometry_msgs::msg::Pose& pose, const sh
   return publishMarker(triangle_marker_);
 }
 
-bool RvizVisualTools::publishGraph(const graph_msgs::msg::GeometryGraph& graph, colors color, double radius)
-{
-  // Track which pairs of nodes we've already connected since graph is
-  // bi-directional
-  typedef std::pair<std::size_t, std::size_t> node_ids;
-  std::set<node_ids> added_edges;
-  std::pair<std::set<node_ids>::iterator, bool> return_value;
-  Eigen::Vector3d a, b;
-  for (std::size_t i = 0; i < graph.nodes.size(); ++i)
-  {
-    for (std::size_t j = 0; j < graph.edges[i].node_ids.size(); ++j)
-    {
-      // Check if we've already added this pair of nodes (edge)
-      return_value = added_edges.insert(node_ids(i, j));
-      if (!return_value.second)
-      {
-        // Element already existed in set, so don't add a new collision object
-      }
-      else
-      {
-        // Create a cylinder from two points
-        a = convertPoint(graph.nodes[i]);
-        b = convertPoint(graph.nodes[graph.edges[i].node_ids[j]]);
+// TODO(mlautman): port graph_msgs
+// bool RvizVisualTools::publishGraph(const graph_msgs::msg::GeometryGraph& graph, colors color, double radius)
+// {
+//   // Track which pairs of nodes we've already connected since graph is
+//   // bi-directional
+//   typedef std::pair<std::size_t, std::size_t> node_ids;
+//   std::set<node_ids> added_edges;
+//   std::pair<std::set<node_ids>::iterator, bool> return_value;
+//   Eigen::Vector3d a, b;
+//   for (std::size_t i = 0; i < graph.nodes.size(); ++i)
+//   {
+//     for (std::size_t j = 0; j < graph.edges[i].node_ids.size(); ++j)
+//     {
+//       // Check if we've already added this pair of nodes (edge)
+//       return_value = added_edges.insert(node_ids(i, j));
+//       if (!return_value.second)
+//       {
+//         // Element already existed in set, so don't add a new collision object
+//       }
+//       else
+//       {
+//         // Create a cylinder from two points
+//         a = convertPoint(graph.nodes[i]);
+//         b = convertPoint(graph.nodes[graph.edges[i].node_ids[j]]);
 
-        publishCylinder(a, b, color, radius);
-      }
-    }
-  }
+//         publishCylinder(a, b, color, radius);
+//       }
+//     }
+//   }
 
-  return true;
-}
+//   return true;
+// }
 
 bool RvizVisualTools::publishCuboid(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2, colors color)
 {
@@ -1738,7 +1777,7 @@ bool RvizVisualTools::publishCuboid(const geometry_msgs::msg::Point& point1, con
                                     colors color, const std::string& ns, std::size_t id)
 {
   // Set the timestamp
-  cuboid_marker_.header.stamp = node_->now();
+  cuboid_marker_.header.stamp = clock_interface_->get_clock()->now();
   cuboid_marker_.ns = ns;
 
   if (id == 0)
@@ -1791,7 +1830,7 @@ bool RvizVisualTools::publishCuboid(const Eigen::Isometry3d& pose, double depth,
 bool RvizVisualTools::publishCuboid(const geometry_msgs::msg::Pose& pose, double depth, double width, double height,
                                     colors color)
 {
-  cuboid_marker_.header.stamp = node_->now();
+  cuboid_marker_.header.stamp = clock_interface_->get_clock()->now();
 
   cuboid_marker_.id++;
   cuboid_marker_.color = getColor(color);
@@ -1882,7 +1921,7 @@ bool RvizVisualTools::publishLine(const geometry_msgs::msg::Point& point1, const
                                   const std_msgs::msg::ColorRGBA& color, const geometry_msgs::msg::Vector3& scale)
 {
   // Set the timestamp
-  line_strip_marker_.header.stamp = node_->now();
+  line_strip_marker_.header.stamp = clock_interface_->get_clock()->now();
 
   line_strip_marker_.id++;
   line_strip_marker_.color = color;
@@ -1926,7 +1965,7 @@ bool RvizVisualTools::publishLines(const std::vector<geometry_msgs::msg::Point>&
                                    const std::vector<std_msgs::msg::ColorRGBA>& colors, const geometry_msgs::msg::Vector3& scale)
 {
   // Setup marker
-  line_list_marker_.header.stamp = ros::Time();
+  line_list_marker_.header.stamp = builtin_interfaces::msg::Time();
   line_list_marker_.ns = "Line Array";
 
   // Provide a new id every call to this function
@@ -1963,7 +2002,7 @@ bool RvizVisualTools::publishLineStrip(const std::vector<geometry_msgs::msg::Poi
     return true;
   }
 
-  line_strip_marker_.header.stamp = ros::Time();
+  line_strip_marker_.header.stamp = builtin_interfaces::msg::Time();
   line_strip_marker_.ns = ns;
 
   // Provide a new id every call to this function
@@ -2179,7 +2218,7 @@ bool RvizVisualTools::publishWireframeCuboid(const Eigen::Isometry3d& pose, cons
   p8 = pose * p8;
 
   // Setup marker
-  line_list_marker_.header.stamp = ros::Time();
+  line_list_marker_.header.stamp = builtin_interfaces::msg::Time();
   line_list_marker_.ns = ns;
 
   if (id == 0)
@@ -2286,7 +2325,7 @@ bool RvizVisualTools::publishWireframeRectangle(const Eigen::Isometry3d& pose, d
   p4 = pose * p4;
 
   // Setup marker
-  line_list_marker_.header.stamp = ros::Time();
+  line_list_marker_.header.stamp = builtin_interfaces::msg::Time();
   line_list_marker_.ns = "Wireframe Rectangle";
 
   std_msgs::msg::ColorRGBA this_color = getColor(color);
@@ -2336,7 +2375,7 @@ bool RvizVisualTools::publishWireframeRectangle(const Eigen::Isometry3d& pose, c
   p4 = pose * p4_in;
 
   // Setup marker
-  line_list_marker_.header.stamp = ros::Time();
+  line_list_marker_.header.stamp = builtin_interfaces::msg::Time();
   line_list_marker_.ns = "Wireframe Rectangle";
 
   // Provide a new id every call to this function
@@ -2418,7 +2457,7 @@ bool RvizVisualTools::publishSpheres(const std::vector<geometry_msgs::msg::Point
 bool RvizVisualTools::publishSpheres(const std::vector<geometry_msgs::msg::Point>& points, colors color,
                                      const geometry_msgs::msg::Vector3& scale, const std::string& ns)
 {
-  spheres_marker_.header.stamp = ros::Time();
+  spheres_marker_.header.stamp = builtin_interfaces::msg::Time();
   spheres_marker_.ns = ns;
 
   // Provide a new id every call to this function
@@ -2464,7 +2503,7 @@ bool RvizVisualTools::publishSpheres(const std::vector<geometry_msgs::msg::Point
                                      const std::vector<std_msgs::msg::ColorRGBA>& colors,
                                      const geometry_msgs::msg::Vector3& scale, const std::string& ns)
 {
-  spheres_marker_.header.stamp = ros::Time();
+  spheres_marker_.header.stamp = builtin_interfaces::msg::Time();
   spheres_marker_.ns = ns;
 
   // Provide a new id every call to this function
@@ -2510,7 +2549,7 @@ bool RvizVisualTools::publishText(const geometry_msgs::msg::Pose& pose, const st
     text_marker_.id++;
   }
 
-  text_marker_.header.stamp = node_->now();
+  text_marker_.header.stamp = clock_interface_->get_clock()->now();
   text_marker_.header.frame_id = base_frame_;
   text_marker_.text = text;
   text_marker_.pose = pose;
@@ -2880,8 +2919,7 @@ void RvizVisualTools::loadRemoteControl()
   // Load remote
   if (!remote_control_)
   {
-    remote_control_ = std::make_shared<RemoteControl>(node_);
-    ros::spinOnce();
+    remote_control_ = std::make_shared<RemoteControl>(topics_interface_, logging_interface_);
   }
 }
 

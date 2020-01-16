@@ -196,8 +196,9 @@ public:
    * \param marker_topic - rostopic to publish markers to - your Rviz display should match
    * \param nh - optional ros node handle - defaults to "~"
    */
+  template<class NodePtr>
   explicit RvizVisualTools(std::string base_frame, std::string marker_topic = RVIZ_MARKER_TOPIC,
-                           rclcpp::Node::SharedPtr nh = std::make_shared<rclcpp::Node>("rviz_visual_tools_node", ""););
+                           rclcpp::Node::SharedPtr nh = std::make_shared<rclcpp::Node>("rviz_visual_tools_node", ""));
   /**
    * \brief Deconstructor
    */
@@ -248,7 +249,8 @@ public:
    * \param blocking - if true, the function loop until a subscriber is gotten
    * \return true on successful connection
    */
-  bool waitForSubscriber(const ros::Publisher& pub, double wait_time = 0.5, bool blocking = false);
+  template<class PublisherPtr>
+  bool waitForSubscriber(const PublisherPtr& pub, double wait_time = 0.5, bool blocking = false);
 
   /**
    * \brief Change the transparency of all markers published
@@ -869,7 +871,8 @@ public:
    * \param radius - width of cylinders
    * \return true on success
    */
-  bool publishGraph(const graph_msgs::msg::GeometryGraph& graph, colors color, double radius);
+  // TODO(mlautman): port graph_msgs
+  // bool publishGraph(const graph_msgs::msg::GeometryGraph& graph, colors color, double radius);
 
   /**
    * \brief Display a marker of a text
@@ -1079,15 +1082,19 @@ public:
   /** \brief Wait for user feedback i.e. through a button or joystick */
   void prompt(const std::string& msg);
 
+protected:
   /** \brief Ability to load remote control on the fly */
   RemoteControlPtr& getRemoteControl();
 
   /** \brief Pre-load remote control */
   void loadRemoteControl();
 
-protected:
-  // A shared node handle
-  rclcpp::Node::SharedPtr nh_;
+  // Node Interfaces
+  rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr topics_interface_;
+  rclcpp::node_interfaces::NodeGraphInterface::SharedPtr graph_interface_;
+  rclcpp::node_interfaces::NodeClockInterface::SharedPtr clock_interface_;
+  rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr logging_interface_;
+  rclcpp::Logger logger_;
 
   // Short name for this class
   static RVIZ_VISUAL_TOOLS_DECL const std::string NAME;
@@ -1096,7 +1103,7 @@ protected:
   RemoteControlPtr remote_control_;
 
   // ROS publishers
-  ros::Publisher pub_rviz_markers_;  // for rviz visualization markers
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_rviz_markers_;  // for rviz visualization markers
   bool pub_rviz_markers_connected_ = false;
   bool pub_rviz_markers_waited_ = false;
 
@@ -1105,7 +1112,7 @@ protected:
   std::string base_frame_;    // name of base link
 
   // Duration to have Rviz markers persist, 0 for infinity
-  ros::Duration marker_lifetime_;
+  builtin_interfaces::msg::Duration marker_lifetime_;
 
   // Settings
   bool batch_publishing_enabled_ = true;
