@@ -40,6 +40,10 @@
 
 // Conversions
 #include <tf2/convert.h>
+#include <tf2/LinearMath/Vector3.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 // C++
 #include <cmath>  // for random poses
@@ -78,14 +82,13 @@ RvizVisualTools::RvizVisualTools(
   , logger_(logging_interface->get_logger().get_child("rviz_visual_tools"))
   , marker_topic_(marker_topic)
   , base_frame_(base_frame)
-  ,
 {
   initialize();
 }
 
 void RvizVisualTools::initialize()
 {
-  marker_lifetime_ = builtin_interfaces::msg::Duration(0.0);  // 0 - unlimited
+  marker_lifetime_ = builtin_interfaces::msg::Duration();  // 0 - unlimited
 
   // Cache the reusable markers
   loadRvizMarkers();
@@ -292,14 +295,14 @@ void RvizVisualTools::loadMarkerPub(bool wait_for_subscriber, bool latched)
   }
 
   // Rviz marker publisher
-  feedback_pub_qos = rclcpp::QoS(10);
+  const rclcpp::QoS feedback_pub_qos = rclcpp::QoS(10);
   pub_rviz_markers_ = rclcpp::create_publisher<visualization_msgs::msg::MarkerArray>(
     topics_interface_,
     marker_topic_,
     feedback_pub_qos);
 
   std::stringstream ss;
-  ss << "Publishing Rviz markers on topic " << pub_rviz_markers_.getTopic();
+  ss << "Publishing Rviz markers on topic " << pub_rviz_markers_->get_topic_name();
   RCLCPP_DEBUG(logger_, ss.str().c_str());
 
   if (wait_for_subscriber)
@@ -324,21 +327,13 @@ template<class PublisherPtr>
 bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_time, bool blocking)
 {
   // Will wait at most this amount of time
-
-  int32_t sec = static_cast<int32_t>(floor(lifetime));
-  int32_t nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
-  builtin_interfaces::msg::Duration wait_duration(sec, nsec)
-
-  builtin_interfaces::msg::Time max_time(clock_interface_->get_clock()->now() + wait_duration);
+  rclcpp::Time max_time(clock_interface_->get_clock()->now() + rclcpp::Duration(wait_time));
 
   // This is wrong. It returns only the number of subscribers that have already
   // established their direct connections to this publisher
 
   // How often to check for subscribers
-  double loop_rate = 1.0 / 200.0;
-  sec = static_cast<int32_t>(floor(loop_rate));
-  nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
-  builtin_interfaces::msg::Duration loop_duration(sec, nsec);
+  rclcpp::Duration loop_duration(1.0 / 200.0);
   if (!pub)
   {
     RCLCPP_ERROR(logger_, "loadMarkerPub() has not been called yet, unable to wait for subscriber.");
@@ -349,8 +344,8 @@ bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_tim
   if (blocking && num_existing_subscribers == 0)
   {
     std::stringstream ss;
-    ss << "Topic '" << pub.getTopic() << "' waiting for subscriber...";
-    ROS_INFO(logger_, ss.str().c_str());
+    ss << "Topic '" << pub->get_topic_name() << "' waiting for subscriber...";
+    RCLCPP_INFO(logger_, ss.str().c_str());
   }
 
   // Wait for subscriber
@@ -359,21 +354,21 @@ bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_tim
     if (!blocking && clock_interface_->get_clock()->now() > max_time)  // Check if timed out
     {
       std::stringstream ss;
-      ss <<"Topic '" << pub.getTopic() << "' unable to connect to any subscribers within "
+      ss <<"Topic '" << pub->get_topic_name() << "' unable to connect to any subscribers within "
                                                << wait_time
                                                << " sec. It is possible initially published visual messages "
                                                   "will be lost.";
-      ROS_WARN(logger_, ss.str().c_str());
+      RCLCPP_WARN(logger_, ss.str().c_str());
       return false;
     }
 
     // Sleep
-    rclcpp::sleep_for(poll_rate.nanoseconds());
+    rclcpp::sleep_for(std::chrono::nanoseconds(loop_duration.nanoseconds()));
 
     // Check again
     num_existing_subscribers = graph_interface_->count_subscribers(topic_name);
-
   }
+
   if (!rclcpp::ok())
   {
     return false;
@@ -385,9 +380,9 @@ bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_tim
 
 void RvizVisualTools::setLifetime(double lifetime)
 {
-  int32_t sec = static_cast<int32_t>(floor(lifetime));
-  int32_t nsec = static_cast<int32_t>(std::round((lifetime - sec) * 1e9));
-  marker_lifetime_ = builtin_interfaces::msg::Duration(sec, nsec)
+  marker_lifetime_ = builtin_interfaces::msg::Duration();
+  marker_lifetime_.sec = static_cast<int32_t>(floor(lifetime));
+  marker_lifetime_.nanosec = static_cast<uint32_t>(std::round((lifetime - marker_lifetime_.sec) * 1e9));
 
   // Update cached markers
   arrow_marker_.lifetime = marker_lifetime_;
@@ -410,6 +405,7 @@ std_msgs::msg::ColorRGBA RvizVisualTools::getColor(colors color) const
 {
   std_msgs::msg::ColorRGBA result;
 
+  std::stringstream ss;
   switch (color)
   {
     case RED:
@@ -524,11 +520,22 @@ std_msgs::msg::ColorRGBA RvizVisualTools::getColor(colors color) const
       result = createRandColor();
       break;
     case DEFAULT:
-      std::stringstream ss;
       ss <<  "The 'DEFAULT' color should probably not be used with getColor(). Defaulting to blue.";
-      ROS_WARN(logger_, ss.str().c_str());
+      RCLCPP_WARN(logger_, ss.str().c_str());
+      // BLUE:
+      result.r = 0.1;
+      result.g = 0.1;
+      result.b = 0.8;
+      result.a = alpha_;
+      break;
     case BLUE:
+      result.r = 0.1;
+      result.g = 0.1;
+      result.b = 0.8;
+      result.a = alpha_;
+      break;
     default:
+      // BLUE:
       result.r = 0.1;
       result.g = 0.1;
       result.b = 0.8;
@@ -633,7 +640,7 @@ std_msgs::msg::ColorRGBA RvizVisualTools::createRandColor() const
     {
       std::stringstream ss;
       ss <<  "Unable to find appropriate random color after " << max_attempts << " attempts";
-      ROS_WARN(logger_, ss.str().c_str());
+      RCLCPP_WARN(logger_, ss.str().c_str());
       break;
     }
   } while (result.r + result.g + result.b < 1.5);  // 3 would be white
@@ -656,14 +663,14 @@ std_msgs::msg::ColorRGBA RvizVisualTools::getColorScale(double value) const
   {
     std::stringstream ss;
     ss <<  "Intensity value for color scale is below range [0,1], value: " << value;
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     value = 0;
   }
   else if (value > 1)
   {
     std::stringstream ss;
     ss <<  "Intensity value for color scale is above range [0,1], value: " << value;
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     value = 1;
   }
 
@@ -740,7 +747,7 @@ geometry_msgs::msg::Vector3 RvizVisualTools::getScale(scales scale, double marke
       val = 0.5;
       break;
     default:
-      ROS_ERROR(logger_, "Not implemented yet");
+      RCLCPP_ERROR(logger_, "Not implemented yet");
       break;
   }
 
@@ -829,16 +836,16 @@ Eigen::Isometry3d RvizVisualTools::getVectorBetweenPoints(const Eigen::Vector3d&
   // Method 1 - TF - works
 
   // Convert vector to TF format
-  tf::Vector3 tf_right_axis_vector;
-  tf::vectorEigenToTF(right_axis_vector, tf_right_axis_vector);
+  tf2::Vector3 tf_right_axis_vector(right_axis_vector.x(), right_axis_vector.y(), right_axis_vector.z());
 
   // Create quaternion using 'Axis angle Constructor'
   //   axis: The axis which the rotation is around
   //   angle: The magnitude of the rotation around the angle (Radians)
-  tf::Quaternion tf_q(tf_right_axis_vector, angle_rotation);
+  tf2::Quaternion tf_q(tf_right_axis_vector, angle_rotation);
 
   // Convert back to Eigen
-  tf::quaternionTFToEigen(tf_q, q);
+  geometry_msgs::msg::Quaternion tf_q_msg = tf2::toMsg(tf_q);
+  tf2::fromMsg(tf_q_msg, q);
   //-------------------------------------------
 
   if (verbose)
@@ -906,7 +913,7 @@ bool RvizVisualTools::trigger()
 {
   if (!batch_publishing_enabled_)
   {
-    ROS_WARN(logger_, "Batch publishing triggered but it was not enabled (unnecessary function call)");
+    RCLCPP_WARN(logger_, "Batch publishing triggered but it was not enabled (unnecessary function call)");
   }
   if (markers_.markers.empty())
   {
@@ -929,7 +936,7 @@ bool RvizVisualTools::publishMarkers(visualization_msgs::msg::MarkerArray& marke
   // Check if connected to a subscriber
   if (!pub_rviz_markers_waited_ && !pub_rviz_markers_connected_)
   {
-    ROS_DEBUG(logger_, "Waiting for subscribers before publishing markers...");
+    RCLCPP_DEBUG(logger_, "Waiting for subscribers before publishing markers...");
     waitForSubscriber(pub_rviz_markers_);
 
     // Only wait for the publisher once, after that just ignore the lack of connection
@@ -983,7 +990,7 @@ bool RvizVisualTools::publishMarkers(visualization_msgs::msg::MarkerArray& marke
     }
   }
   // Publish
-  pub_rviz_markers_.publish(markers);
+  pub_rviz_markers_->publish(markers);
   return true;
 }
 
@@ -1205,7 +1212,7 @@ bool RvizVisualTools::publishSphere(const Eigen::Vector3d& point, colors color, 
                                     std::size_t id)
 {
   geometry_msgs::msg::Pose pose_msg;
-  tf::pointEigenToMsg(point, pose_msg.position);
+  pose_msg.position = tf2::toMsg(point);
   return publishSphere(pose_msg, color, scale, ns, id);
 }
 
@@ -1213,7 +1220,7 @@ bool RvizVisualTools::publishSphere(const Eigen::Vector3d& point, colors color, 
                                     std::size_t id)
 {
   geometry_msgs::msg::Pose pose_msg;
-  tf::pointEigenToMsg(point, pose_msg.position);
+  pose_msg.position = tf2::toMsg(point);
   return publishSphere(pose_msg, color, scale, ns, id);
 }
 
@@ -1257,7 +1264,7 @@ bool RvizVisualTools::publishSphere(const Eigen::Vector3d& point, const std_msgs
                                     const geometry_msgs::msg::Vector3 scale, const std::string& ns, std::size_t id)
 {
   geometry_msgs::msg::Pose pose_msg;
-  tf::pointEigenToMsg(point, pose_msg.position);
+  pose_msg.position = tf2::toMsg(point);
   return publishSphere(pose_msg, color, scale, ns, id);
 }
 
@@ -2004,7 +2011,7 @@ bool RvizVisualTools::publishLineStrip(const std::vector<geometry_msgs::msg::Poi
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return true;
   }
 
@@ -2070,7 +2077,7 @@ bool RvizVisualTools::publishPath(const std::vector<geometry_msgs::msg::Point>& 
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2090,7 +2097,7 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, colors 
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2110,7 +2117,7 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Isometry3d& path, color
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2130,15 +2137,15 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, const s
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return false;
   }
 
   if (path.size() != colors.size())
   {
     std::stringstream ss;
-    ss <<  "Skipping path because " << path.size() << " different from " << colors.size << ".";
-    ROS_ERROR(logger_, ss.str().c_str());
+    ss <<  "Skipping path because " << path.size() << " different from " << colors.size() << ".";
+    RCLCPP_ERROR(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2158,16 +2165,15 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, const s
   {
     std::stringstream ss;
     ss <<  "Skipping path because " << path.size() << " points passed in.";
-    ROS_WARN(logger_, ss.str().c_str());
+    RCLCPP_WARN(logger_, ss.str().c_str());
     return false;
   }
 
   if (path.size() != colors.size())
   {
     std::stringstream ss;
-    ss <<  "Skipping path because " << path.size() << " different from " << colors.size)
-    ROS_ERROR(logger_, ss.str().c_str());
-                                                             << ".");
+    ss <<  "Skipping path because " << path.size() << " different from " << colors.size() << ".";
+    RCLCPP_ERROR(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2589,26 +2595,25 @@ bool RvizVisualTools::publishText(const geometry_msgs::msg::Pose& pose, const st
 
 geometry_msgs::msg::Pose RvizVisualTools::convertPose(const Eigen::Isometry3d& pose)
 {
-  geometry_msgs::msg::Pose pose_msg;
-  tf::poseEigenToMsg(pose, pose_msg);
+  geometry_msgs::msg::Pose pose_msg = tf2::toMsg(pose);
   return pose_msg;
 }
 
 void RvizVisualTools::convertPoseSafe(const Eigen::Isometry3d& pose, geometry_msgs::msg::Pose& pose_msg)
 {
-  tf::poseEigenToMsg(pose, pose_msg);
+  pose_msg = tf2::toMsg(pose);
 }
 
 Eigen::Isometry3d RvizVisualTools::convertPose(const geometry_msgs::msg::Pose& pose)
 {
   Eigen::Isometry3d shared_pose_eigen;
-  tf::poseMsgToEigen(pose, shared_pose_eigen);
+  tf2::fromMsg(pose, shared_pose_eigen);
   return shared_pose_eigen;
 }
 
 void RvizVisualTools::convertPoseSafe(const geometry_msgs::msg::Pose& pose_msg, Eigen::Isometry3d& pose)
 {
-  tf::poseMsgToEigen(pose_msg, pose);
+  tf2::fromMsg(pose_msg, pose);
 }
 
 Eigen::Isometry3d RvizVisualTools::convertPoint32ToPose(const geometry_msgs::msg::Point32& point)
@@ -2642,8 +2647,7 @@ Eigen::Isometry3d RvizVisualTools::convertPointToPose(const Eigen::Vector3d& poi
 
 geometry_msgs::msg::Point RvizVisualTools::convertPoseToPoint(const Eigen::Isometry3d& pose)
 {
-  geometry_msgs::msg::Pose pose_msg;
-  tf::poseEigenToMsg(pose, pose_msg);
+  geometry_msgs::msg::Pose pose_msg = tf2::toMsg(pose);
   return pose_msg.position;
 }
 
@@ -2715,7 +2719,10 @@ Eigen::Isometry3d RvizVisualTools::convertFromXYZRPY(double tx, double ty, doubl
       break;
 
     default:
-      ROS_ERROR_STREAM("Invalid euler convention entry " << convention);
+      std::stringstream ss;
+      ss << "Invalid euler convention entry " << convention;
+      rclcpp::Node tmp_node("rviz_visual_tools");
+      RCLCPP_ERROR(tmp_node.get_logger(), ss.str().c_str());
       break;
   }
 
@@ -2726,9 +2733,10 @@ Eigen::Isometry3d RvizVisualTools::convertFromXYZRPY(const std::vector<double>& 
 {
   if (transform6.size() != 6)
   {
+    rclcpp::Node tmp_node("rviz_visual_tools");
     std::stringstream ss;
     ss <<  "Incorrect number of variables passed for 6-size transform";
-    ROS_ERROR(logger_, ss.str().c_str());
+    RCLCPP_ERROR(tmp_node.get_logger(), ss.str().c_str());
     throw;
   }
 
@@ -2783,33 +2791,21 @@ void RvizVisualTools::generateRandomPose(Eigen::Isometry3d& pose, RandomPoseBoun
   // 0 <= azimuth   <= 2 * pi
   if (pose_bounds.elevation_min_ < 0)
   {
-    std::stringstream ss;
-    ss <<  "min elevation bound < 0, setting equal to 0";
-    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.elevation_min_ = 0;
   }
 
   if (pose_bounds.elevation_max_ > M_PI)
   {
-    std::stringstream ss;
-    ss <<  "max elevation bound > pi, setting equal to pi ";
-    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.elevation_max_ = M_PI;
   }
 
   if (pose_bounds.azimuth_min_ < 0)
   {
-    std::stringstream ss;
-    ss <<  "min azimuth bound < 0, setting equal to 0";
-    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.azimuth_min_ = 0;
   }
 
   if (pose_bounds.azimuth_max_ > 2 * M_PI)
   {
-    std::stringstream ss;
-    ss <<  "max azimuth bound > 2 pi, setting equal to 2 pi ";
-    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.azimuth_max_ = 2 * M_PI;
   }
 

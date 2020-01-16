@@ -194,11 +194,17 @@ public:
    * \brief Constructor
    * \param base_frame - common base for all visualization markers, usually "/world" or "/odom"
    * \param marker_topic - rostopic to publish markers to - your Rviz display should match
-   * \param nh - optional ros node handle - defaults to "~"
+   * \param node - ros node handle
    */
   template<class NodePtr>
-  explicit RvizVisualTools(std::string base_frame, std::string marker_topic = RVIZ_MARKER_TOPIC,
-                           rclcpp::Node::SharedPtr nh = std::make_shared<rclcpp::Node>("rviz_visual_tools_node", ""));
+  explicit RvizVisualTools(std::string base_frame, std::string marker_topic, NodePtr node);
+
+  explicit RvizVisualTools(const std::string& base_frame, const std::string& marker_topic,
+    const rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& topics_interface,
+    const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& graph_interface,
+    const rclcpp::node_interfaces::NodeClockInterface::SharedPtr& clock_interface,
+    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr& logging_interface);
+
   /**
    * \brief Deconstructor
    */
