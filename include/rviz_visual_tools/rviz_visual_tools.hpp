@@ -196,14 +196,14 @@ public:
    * \param marker_topic - rostopic to publish markers to - your Rviz display should match
    * \param node - ros node handle
    */
-  template<class NodePtr>
+  template <class NodePtr>
   explicit RvizVisualTools(std::string base_frame, std::string marker_topic, NodePtr node);
 
   explicit RvizVisualTools(const std::string& base_frame, const std::string& marker_topic,
-    const rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& topics_interface,
-    const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& graph_interface,
-    const rclcpp::node_interfaces::NodeClockInterface::SharedPtr& clock_interface,
-    const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr& logging_interface);
+                           const rclcpp::node_interfaces::NodeTopicsInterface::SharedPtr& topics_interface,
+                           const rclcpp::node_interfaces::NodeGraphInterface::SharedPtr& graph_interface,
+                           const rclcpp::node_interfaces::NodeClockInterface::SharedPtr& clock_interface,
+                           const rclcpp::node_interfaces::NodeLoggingInterface::SharedPtr& logging_interface);
 
   /**
    * \brief Deconstructor
@@ -255,7 +255,7 @@ public:
    * \param blocking - if true, the function loop until a subscriber is gotten
    * \return true on successful connection
    */
-  template<class PublisherPtr>
+  template <class PublisherPtr>
   bool waitForSubscriber(const PublisherPtr& pub, double wait_time = 0.5, bool blocking = false);
 
   /**
@@ -495,8 +495,8 @@ public:
                      const geometry_msgs::msg::Vector3 scale, const std::string& ns = "Sphere", std::size_t id = 0);
   bool publishSphere(const Eigen::Isometry3d& pose, const std_msgs::msg::ColorRGBA& color,
                      const geometry_msgs::msg::Vector3 scale, const std::string& ns = "Sphere", std::size_t id = 0);
-  bool publishSphere(const Eigen::Vector3d& point, const std_msgs::msg::ColorRGBA& color, const geometry_msgs::msg::Vector3 scale,
-                     const std::string& ns = "Sphere", std::size_t id = 0);
+  bool publishSphere(const Eigen::Vector3d& point, const std_msgs::msg::ColorRGBA& color,
+                     const geometry_msgs::msg::Vector3 scale, const std::string& ns = "Sphere", std::size_t id = 0);
   bool publishSphere(const geometry_msgs::msg::PoseStamped& pose, colors color, const geometry_msgs::msg::Vector3 scale,
                      const std::string& ns = "Sphere", std::size_t id = 0);
 
@@ -529,8 +529,9 @@ public:
    */
   bool publishSpheres(const EigenSTL::vector_Vector3d& points, const std::vector<colors>& colors, scales scale = MEDIUM,
                       const std::string& ns = "Spheres");
-  bool publishSpheres(const std::vector<geometry_msgs::msg::Point>& points, const std::vector<std_msgs::msg::ColorRGBA>& colors,
-                      const geometry_msgs::msg::Vector3& scale, const std::string& ns = "Spheres");
+  bool publishSpheres(const std::vector<geometry_msgs::msg::Point>& points,
+                      const std::vector<std_msgs::msg::ColorRGBA>& colors, const geometry_msgs::msg::Vector3& scale,
+                      const std::string& ns = "Spheres");
 
   /**
    * \brief Display an arrow along the x-axis of a pose
@@ -541,7 +542,8 @@ public:
    * \return true on success
    */
   bool publishXArrow(const Eigen::Isometry3d& pose, colors color = RED, scales scale = MEDIUM, double length = 0.0);
-  bool publishXArrow(const geometry_msgs::msg::Pose& pose, colors color = RED, scales scale = MEDIUM, double length = 0.0);
+  bool publishXArrow(const geometry_msgs::msg::Pose& pose, colors color = RED, scales scale = MEDIUM,
+                     double length = 0.0);
   bool publishXArrow(const geometry_msgs::msg::PoseStamped& pose, colors color = RED, scales scale = MEDIUM,
                      double length = 0.0);
 
@@ -554,7 +556,8 @@ public:
    * \return true on success
    */
   bool publishYArrow(const Eigen::Isometry3d& pose, colors color = GREEN, scales scale = MEDIUM, double length = 0.0);
-  bool publishYArrow(const geometry_msgs::msg::Pose& pose, colors color = GREEN, scales scale = MEDIUM, double length = 0.0);
+  bool publishYArrow(const geometry_msgs::msg::Pose& pose, colors color = GREEN, scales scale = MEDIUM,
+                     double length = 0.0);
   bool publishYArrow(const geometry_msgs::msg::PoseStamped& pose, colors color = GREEN, scales scale = MEDIUM,
                      double length = 0.0);
 
@@ -568,7 +571,8 @@ public:
    */
   bool publishZArrow(const Eigen::Isometry3d& pose, colors color = BLUE, scales scale = MEDIUM, double length = 0.0,
                      std::size_t id = 0);
-  bool publishZArrow(const geometry_msgs::msg::Pose& pose, colors color = BLUE, scales scale = MEDIUM, double length = 0.0);
+  bool publishZArrow(const geometry_msgs::msg::Pose& pose, colors color = BLUE, scales scale = MEDIUM,
+                     double length = 0.0);
   bool publishZArrow(const geometry_msgs::msg::PoseStamped& pose, colors color = BLUE, scales scale = MEDIUM,
                      double length = 0.0);
   bool publishZArrow(const geometry_msgs::msg::PoseStamped& pose, colors color = BLUE, scales scale = MEDIUM,
@@ -586,8 +590,8 @@ public:
    */
   bool publishArrow(const Eigen::Isometry3d& pose, colors color = BLUE, scales scale = MEDIUM, double length = 0.0,
                     std::size_t id = 0);
-  bool publishArrow(const geometry_msgs::msg::Pose& pose, colors color = BLUE, scales scale = MEDIUM, double length = 0.0,
-                    std::size_t id = 0);
+  bool publishArrow(const geometry_msgs::msg::Pose& pose, colors color = BLUE, scales scale = MEDIUM,
+                    double length = 0.0, std::size_t id = 0);
   bool publishArrow(const geometry_msgs::msg::PoseStamped& pose, colors color = BLUE, scales scale = MEDIUM,
                     double length = 0.0, std::size_t id = 0);
   bool publishArrow(const geometry_msgs::msg::Point& start, const geometry_msgs::msg::Point& end, colors color = BLUE,
@@ -601,8 +605,8 @@ public:
    * \return true on success
    */
   bool publishCuboid(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2, colors color = BLUE);
-  bool publishCuboid(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2, colors color = BLUE,
-                     const std::string& ns = "Cuboid", std::size_t id = 0);
+  bool publishCuboid(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2,
+                     colors color = BLUE, const std::string& ns = "Cuboid", std::size_t id = 0);
 
   /**
    * \brief Display a rectangular cuboid
@@ -613,7 +617,8 @@ public:
    * \param color - an enum pre-defined name of a color
    * \return true on success
    */
-  bool publishCuboid(const geometry_msgs::msg::Pose& pose, double depth, double width, double height, colors color = BLUE);
+  bool publishCuboid(const geometry_msgs::msg::Pose& pose, double depth, double width, double height,
+                     colors color = BLUE);
   bool publishCuboid(const Eigen::Isometry3d& pose, double depth, double width, double height, colors color = BLUE);
 
   /**
@@ -633,8 +638,8 @@ public:
                    scales scale = MEDIUM);
   bool publishLine(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2, const std_msgs::msg::ColorRGBA& color,
                    double radius);
-  bool publishLine(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2, colors color = BLUE,
-                   scales scale = MEDIUM);
+  bool publishLine(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2,
+                   colors color = BLUE, scales scale = MEDIUM);
   bool publishLine(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2,
                    const std_msgs::msg::ColorRGBA& color, scales scale = MEDIUM);
   bool publishLine(const geometry_msgs::msg::Point& point1, const geometry_msgs::msg::Point& point2,
@@ -650,7 +655,8 @@ public:
    */
   bool publishLines(const EigenSTL::vector_Vector3d& aPoints, const EigenSTL::vector_Vector3d& bPoints,
                     const std::vector<colors>& colors, scales scale = MEDIUM);
-  bool publishLines(const std::vector<geometry_msgs::msg::Point>& aPoints, const std::vector<geometry_msgs::msg::Point>& bPoints,
+  bool publishLines(const std::vector<geometry_msgs::msg::Point>& aPoints,
+                    const std::vector<geometry_msgs::msg::Point>& bPoints,
                     const std::vector<std_msgs::msg::ColorRGBA>& colors, const geometry_msgs::msg::Vector3& scale);
 
   /**
@@ -697,8 +703,8 @@ public:
   bool publishPath(const EigenSTL::vector_Vector3d& path, const std::vector<colors>& colors, double radius = 0.01,
                    const std::string& ns = "Path");
 
-  bool publishPath(const EigenSTL::vector_Vector3d& path, const std::vector<std_msgs::msg::ColorRGBA>& colors, double radius,
-                   const std::string& ns = "Path");
+  bool publishPath(const EigenSTL::vector_Vector3d& path, const std::vector<std_msgs::msg::ColorRGBA>& colors,
+                   double radius, const std::string& ns = "Path");
 
   /**
    * \brief Display a marker of a polygon
@@ -820,8 +826,8 @@ public:
                        scales scale = MEDIUM, const std::string& ns = "Cylinder");
   bool publishCylinder(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2, colors color, double radius = 0.01,
                        const std::string& ns = "Cylinder");
-  bool publishCylinder(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2, const std_msgs::msg::ColorRGBA& color,
-                       double radius = 0.01, const std::string& ns = "Cylinder");
+  bool publishCylinder(const Eigen::Vector3d& point1, const Eigen::Vector3d& point2,
+                       const std_msgs::msg::ColorRGBA& color, double radius = 0.01, const std::string& ns = "Cylinder");
 
   /**
    * \brief Display a marker of a cylinder
@@ -833,8 +839,8 @@ public:
    */
   bool publishCylinder(const Eigen::Isometry3d& pose, colors color = BLUE, double height = 0.1, double radius = 0.01,
                        const std::string& ns = "Cylinder");
-  bool publishCylinder(const geometry_msgs::msg::Pose& pose, colors color = BLUE, double height = 0.1, double radius = 0.01,
-                       const std::string& ns = "Cylinder");
+  bool publishCylinder(const geometry_msgs::msg::Pose& pose, colors color = BLUE, double height = 0.1,
+                       double radius = 0.01, const std::string& ns = "Cylinder");
   bool publishCylinder(const geometry_msgs::msg::Pose& pose, const std_msgs::msg::ColorRGBA& color, double height = 0.1,
                        double radius = 0.01, const std::string& ns = "Cylinder");
 
@@ -865,8 +871,8 @@ public:
    * to incremental counter
    * \return true on success
    */
-  bool publishMesh(const Eigen::Isometry3d& pose, const shape_msgs::msg::Mesh& mesh, colors color = CLEAR, double scale = 1,
-                   const std::string& ns = "mesh", std::size_t id = 0);
+  bool publishMesh(const Eigen::Isometry3d& pose, const shape_msgs::msg::Mesh& mesh, colors color = CLEAR,
+                   double scale = 1, const std::string& ns = "mesh", std::size_t id = 0);
   bool publishMesh(const geometry_msgs::msg::Pose& pose, const shape_msgs::msg::Mesh& mesh, colors color = CLEAR,
                    double scale = 1, const std::string& ns = "mesh", std::size_t id = 0);
 
@@ -1109,7 +1115,8 @@ protected:
   RemoteControlPtr remote_control_;
 
   // ROS publishers
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_rviz_markers_;  // for rviz visualization markers
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub_rviz_markers_;  // for rviz visualization
+                                                                                         // markers
   bool pub_rviz_markers_connected_ = false;
   bool pub_rviz_markers_waited_ = false;
 
