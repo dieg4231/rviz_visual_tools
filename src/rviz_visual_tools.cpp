@@ -350,7 +350,7 @@ bool RvizVisualTools::waitForSubscriber(const PublisherPtr& pub, double wait_tim
   {
     std::stringstream ss;
     ss << "Topic '" << pub.getTopic() << "' waiting for subscriber...";
-    ROS_INFO_STREAM_NAMED(LOGNAME, ss.str().c_str());
+    ROS_INFO(logger_, ss.str().c_str());
   }
 
   // Wait for subscriber
@@ -524,9 +524,9 @@ std_msgs::msg::ColorRGBA RvizVisualTools::getColor(colors color) const
       result = createRandColor();
       break;
     case DEFAULT:
-      ROS_WARN_STREAM_NAMED(LOGNAME, "The 'DEFAULT' color should probably not "
-                                     "be used with getColor(). Defaulting to "
-                                     "blue.");
+      std::stringstream ss;
+      ss <<  "The 'DEFAULT' color should probably not be used with getColor(). Defaulting to blue.";
+      ROS_WARN(logger_, ss.str().c_str());
     case BLUE:
     default:
       result.r = 0.1;
@@ -627,12 +627,13 @@ std_msgs::msg::ColorRGBA RvizVisualTools::createRandColor() const
     result.r = fRand(0.0, 1.0);
     result.g = fRand(0.0, 1.0);
     result.b = fRand(0.0, 1.0);
-    // ROS_DEBUG_STREAM_NAMED(LOGNAME, "Looking for random color that is not too light, current value is "
-    //<< (result.r + result.g + result.b) << " attempt #" << attempts);
+    std::stringstream ss;
     attempts++;
     if (attempts > max_attempts)
     {
-      ROS_WARN_STREAM_NAMED(LOGNAME, "Unable to find appropriate random color after " << max_attempts << " attempts");
+      std::stringstream ss;
+      ss <<  "Unable to find appropriate random color after " << max_attempts << " attempts";
+      ROS_WARN(logger_, ss.str().c_str());
       break;
     }
   } while (result.r + result.g + result.b < 1.5);  // 3 would be white
@@ -653,12 +654,16 @@ std_msgs::msg::ColorRGBA RvizVisualTools::getColorScale(double value) const
   // User warning
   if (value < 0)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Intensity value for color scale is below range [0,1], value: " << value);
+    std::stringstream ss;
+    ss <<  "Intensity value for color scale is below range [0,1], value: " << value;
+    ROS_WARN(logger_, ss.str().c_str());
     value = 0;
   }
   else if (value > 1)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Intensity value for color scale is above range [0,1], value: " << value);
+    std::stringstream ss;
+    ss <<  "Intensity value for color scale is above range [0,1], value: " << value;
+    ROS_WARN(logger_, ss.str().c_str());
     value = 1;
   }
 
@@ -735,7 +740,7 @@ geometry_msgs::msg::Vector3 RvizVisualTools::getScale(scales scale, double marke
       val = 0.5;
       break;
     default:
-      ROS_ERROR_STREAM_NAMED(LOGNAME, "Not implemented yet");
+      ROS_ERROR(logger_, "Not implemented yet");
       break;
   }
 
@@ -901,11 +906,10 @@ bool RvizVisualTools::trigger()
 {
   if (!batch_publishing_enabled_)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Batch publishing triggered but it was not enabled (unnecessary function call)");
+    ROS_WARN(logger_, "Batch publishing triggered but it was not enabled (unnecessary function call)");
   }
   if (markers_.markers.empty())
   {
-    // ROS_WARN_STREAM_NAMED(LOGNAME, "Batch publishing triggered but queue is empty (unnecessary function call)");
     return false;
   }
 
@@ -925,7 +929,7 @@ bool RvizVisualTools::publishMarkers(visualization_msgs::msg::MarkerArray& marke
   // Check if connected to a subscriber
   if (!pub_rviz_markers_waited_ && !pub_rviz_markers_connected_)
   {
-    ROS_DEBUG_STREAM_NAMED(LOGNAME, "Waiting for subscribers before publishing markers...");
+    ROS_DEBUG(logger_, "Waiting for subscribers before publishing markers...");
     waitForSubscriber(pub_rviz_markers_);
 
     // Only wait for the publisher once, after that just ignore the lack of connection
@@ -1998,7 +2002,9 @@ bool RvizVisualTools::publishLineStrip(const std::vector<geometry_msgs::msg::Poi
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return true;
   }
 
@@ -2062,7 +2068,9 @@ bool RvizVisualTools::publishPath(const std::vector<geometry_msgs::msg::Point>& 
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2080,7 +2088,9 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, colors 
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2098,7 +2108,9 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Isometry3d& path, color
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2116,14 +2128,17 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, const s
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return false;
   }
 
   if (path.size() != colors.size())
   {
-    ROS_ERROR_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " different from " << colors.size()
-                                                             << ".");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " different from " << colors.size << ".";
+    ROS_ERROR(logger_, ss.str().c_str());
     return false;
   }
 
@@ -2141,13 +2156,17 @@ bool RvizVisualTools::publishPath(const EigenSTL::vector_Vector3d& path, const s
 {
   if (path.size() < 2)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " points passed in.");
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " points passed in.";
+    ROS_WARN(logger_, ss.str().c_str());
     return false;
   }
 
   if (path.size() != colors.size())
   {
-    ROS_ERROR_STREAM_NAMED(LOGNAME, "Skipping path because " << path.size() << " different from " << colors.size()
+    std::stringstream ss;
+    ss <<  "Skipping path because " << path.size() << " different from " << colors.size)
+    ROS_ERROR(logger_, ss.str().c_str());
                                                              << ".");
     return false;
   }
@@ -2707,7 +2726,9 @@ Eigen::Isometry3d RvizVisualTools::convertFromXYZRPY(const std::vector<double>& 
 {
   if (transform6.size() != 6)
   {
-    ROS_ERROR_STREAM_NAMED(LOGNAME, "Incorrect number of variables passed for 6-size transform");
+    std::stringstream ss;
+    ss <<  "Incorrect number of variables passed for 6-size transform";
+    ROS_ERROR(logger_, ss.str().c_str());
     throw;
   }
 
@@ -2762,25 +2783,33 @@ void RvizVisualTools::generateRandomPose(Eigen::Isometry3d& pose, RandomPoseBoun
   // 0 <= azimuth   <= 2 * pi
   if (pose_bounds.elevation_min_ < 0)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "min elevation bound < 0, setting equal to 0");
+    std::stringstream ss;
+    ss <<  "min elevation bound < 0, setting equal to 0";
+    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.elevation_min_ = 0;
   }
 
   if (pose_bounds.elevation_max_ > M_PI)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "max elevation bound > pi, setting equal to pi ");
+    std::stringstream ss;
+    ss <<  "max elevation bound > pi, setting equal to pi ";
+    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.elevation_max_ = M_PI;
   }
 
   if (pose_bounds.azimuth_min_ < 0)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "min azimuth bound < 0, setting equal to 0");
+    std::stringstream ss;
+    ss <<  "min azimuth bound < 0, setting equal to 0";
+    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.azimuth_min_ = 0;
   }
 
   if (pose_bounds.azimuth_max_ > 2 * M_PI)
   {
-    ROS_WARN_STREAM_NAMED(LOGNAME, "max azimuth bound > 2 pi, setting equal to 2 pi ");
+    std::stringstream ss;
+    ss <<  "max azimuth bound > 2 pi, setting equal to 2 pi ";
+    ROS_WARN(logger_, ss.str().c_str());
     pose_bounds.azimuth_max_ = 2 * M_PI;
   }
 
